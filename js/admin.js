@@ -96,7 +96,10 @@ function cellInput(col, row) {
       oninput: (e) => set(e.target.value === '' ? (col.nullable ? null : 0) : Number(e.target.value)),
     });
   }
-  return h('input', { type: 'text', value: row[col.key] ?? '', placeholder: col.placeholder, 'aria-label': label, oninput: (e) => set(e.target.value) });
+  return h('input', {
+    type: 'text', value: row[col.key] ?? '', placeholder: col.placeholder, 'aria-label': label,
+    style: col.minWidth ? `min-width:${col.minWidth}` : null, oninput: (e) => set(e.target.value),
+  });
 }
 
 function editTable({ columns, rows, newRow, addLabel, minRows = 0, reorder = false, onRemove, removeRow, extra }) {
@@ -276,6 +279,7 @@ function tabRules(d) {
     h('h2', { class: 'card-title' }, 'กำหนดการ'),
     picker,
     hint(`นับวันจากวันเลือกตั้ง, นับจาก${c.start || 'วันเริ่มต้น'} (วันรุ่งขึ้น = 1) หรือนับจากวันสิ้นสุดของกิจกรรมอื่น (เลือกในช่อง "อ้างอิงกิจกรรม" แล้วกิจกรรมนี้จะเลื่อนตามอัตโนมัติ เช่น ตรวจสอบคุณสมบัติ 1–7 วันหลังรับสมัคร) · ช่อง "ถึง" ใช้เมื่อเป็นช่วงหลายวัน · กิจกรรมวันเดียวกันด้านเดียวกันจะรวมเป็นกลุ่มเดียว ลำดับในตารางนี้คือลำดับที่แสดง`),
+    hint('แผนงาน: "ข้อความในแผนงาน" ใช้แทนชื่อกิจกรรมในตารางแผนงาน (ว่าง = ใช้ชื่อกิจกรรม) ใส่ {จังหวัด} {อำเภอ} {อปท} ได้ · หมายเหตุแสดงในช่องหมายเหตุของแผนงาน · ติ๊ก "ตาราง" / "แผนงาน" เพื่อเลือกว่าแสดงที่ใด'),
     editTable({
       rows,
       addLabel: 'เพิ่มกิจกรรม',
@@ -283,7 +287,8 @@ function tabRules(d) {
       removeRow: removeRule, // กิจกรรมที่ผูกอยู่จะเลิกผูกแต่คงวันที่เดิม
       columns: [
         { key: 'text', label: 'กิจกรรม', placeholder: 'ชื่อกิจกรรม' },
-        { key: 'note', label: 'หมายเหตุ (บรรทัดที่ 2)', placeholder: '—' },
+        { key: 'detail', label: 'ข้อความในแผนงาน', placeholder: 'ว่าง = ใช้ชื่อกิจกรรม' },
+        { key: 'note', label: 'หมายเหตุ (บรรทัดที่ 2)', placeholder: '—', minWidth: '180px' },
         { key: 'from', label: 'วันที่', type: 'number', min: -999, max: 999, width: '80px' },
         { key: 'to', label: 'ถึง', type: 'number', min: -999, max: 999, nullable: true, width: '80px' },
         {
@@ -296,15 +301,17 @@ function tabRules(d) {
         },
         { key: 'color', label: 'สีช่อง', type: 'select', paint: true, options: () => [['', 'ไม่มีสี'], ...d.palette.map((p) => [p.id, p.name])] },
         { key: 'side', label: 'ข้อความ', type: 'select', options: () => [['up', 'บน'], ['down', 'ล่าง']], width: '90px' },
+        { key: 'chart', label: 'ตาราง', type: 'checkbox', width: '56px' },
+        { key: 'plan', label: 'แผนงาน', type: 'checkbox', width: '64px' },
       ],
-      newRow: () => ({ id: newId('r'), text: '', note: '', anchor: 'before', ref: null, from: 0, to: null, color: '', side: 'down' }),
+      newRow: () => ({ id: newId('r'), text: '', note: '', anchor: 'before', ref: null, from: 0, to: null, color: '', side: 'down', detail: '', chart: true, plan: true }),
     }),
     h('div', { class: 'admin-actions' },
       h('button', {
         type: 'button', class: 'btn ghost',
         onclick: () => {
           if (!confirm(`คืนกำหนดการของ "${c.name}" เป็นค่าเริ่มต้น?`)) return;
-          d.rulesByCase[c.id] = clone(builtIn || DEFAULT_CONFIG.rulesByCase.vacancy);
+          d.rulesByCase[c.id] = clone(builtIn || DEFAULT_CONFIG.rulesByCase.vacancy).map(normalizeRule);
           markDirty();
           renderAdminTab();
         },

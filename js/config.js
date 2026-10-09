@@ -43,34 +43,44 @@ function h(tag, props = {}, ...children) {
    anchor before  = วันก่อนวันเลือกตั้ง, after = วันหลังวันเลือกตั้ง
           vacancy = วันหลังวันเริ่มต้น (ไม่นับวันเริ่มต้น: ลาออกวันที่ 7 → วันรุ่งขึ้นวันที่ 8 คือ vacancy + 1)
           rule    = วันหลังวันสิ้นสุดของกิจกรรม ref (เลื่อนตามกิจกรรมนั้นอัตโนมัติ)
-   from/to: จำนวนวัน (to ใช้เมื่อเป็นช่วง)   side: up = เขียนเหนือตาราง, down = ใต้ตาราง */
+   from/to: จำนวนวัน (to ใช้เมื่อเป็นช่วง)   side: up = เขียนเหนือตาราง, down = ใต้ตาราง
+   detail: ข้อความในแผนงาน (ว่าง = ใช้ชื่อกิจกรรม) ใส่ {จังหวัด} {อำเภอ} {อปท} ได้
+   chart / plan: แสดงในตารางควบคุม / ในแผนงาน (ไม่ระบุ = แสดง) */
 const DEFAULT_RULES = [
   { id: 'report', text: 'รายงานตำแหน่งว่าง', anchor: 'vacancy', from: 1, side: 'down' },
   { id: 'resign', text: 'ส.ท. ลาออก', anchor: 'vacancy', from: 1, side: 'down' },
   { id: 'nominate', text: 'เสนอรายชื่อ กกต.ท้องถิ่น', anchor: 'vacancy', from: 2, side: 'up' },
-  { id: 'draft', text: 'ผอ.กต.ท้องถิ่น เสนอร่างประกาศ ส.ถ.1/1', anchor: 'before', from: 54, side: 'up' },
-  { id: 'approve', text: 'ผอ.กต.จว. ให้ความเห็นชอบร่างประกาศ ส.ถ.1/1', anchor: 'before', from: 52, side: 'up' },
+  { id: 'draft', text: 'ผอ.กต.ท้องถิ่น เสนอร่างประกาศ ส.ถ.1/1', detail: 'วันที่ ผอ.กต.ท้องถิ่น เสนอร่างประกาศให้มีการเลือกตั้ง (ส.ถ.1/1)', anchor: 'before', from: 54, side: 'up' },
+  { id: 'approve', text: 'ผอ.กต.จว. ให้ความเห็นชอบร่างประกาศ ส.ถ.1/1', detail: 'วันที่ผู้อำนวยการการเลือกตั้งประจำจังหวัด{จังหวัด} ให้ความเห็นชอบร่างประกาศให้มีการเลือกตั้ง (ส.ถ.1/1)', anchor: 'before', from: 52, side: 'up' },
   { id: 'committee', text: 'กกต.ท้องถิ่น ปฏิบัติหน้าที่', anchor: 'before', from: 52, side: 'down' },
-  { id: 'proclaim', text: 'ผอ.กต.ท้องถิ่น ประกาศ ส.ถ.1/1', anchor: 'before', from: 51, side: 'up' },
-  { id: 'register', text: 'รับสมัคร', note: 'ไม่น้อยกว่า 5 วัน', anchor: 'before', from: 48, to: 44, color: 'tan', side: 'up' },
-  { id: 'check', text: 'ตรวจสอบคุณสมบัติ', note: 'ภายใน 7 วันนับแต่วันปิดรับสมัคร', anchor: 'rule', ref: 'register', from: 1, to: 7, color: 'green', side: 'up' },
-  { id: 'announce', text: 'วันสุดท้ายประกาศรายชื่อผู้สมัคร', note: 'ภายหลังการตรวจสอบคุณสมบัติ', anchor: 'rule', ref: 'check', from: 0, side: 'up' },
-  { id: 'objection', text: 'ผู้สมัครมีสิทธิยื่นคำร้องคัดค้านสิทธิการสมัคร', note: 'ภายใน 3 วัน นับแต่วันประกาศรายชื่อผู้มีสิทธิสมัคร', anchor: 'rule', ref: 'announce', from: 1, to: 3, color: 'pink', side: 'up' },
-  { id: 'ballots', text: 'รายงานการสั่งซื้อบัตรเลือกตั้ง', anchor: 'before', from: 30, side: 'up' },
-  { id: 'voterlist', text: 'วันสุดท้ายประกาศบัญชีรายชื่อผู้มีสิทธิเลือกตั้ง', anchor: 'before', from: 26, side: 'down' },
-  { id: 'units', text: 'วันสุดท้ายประกาศกำหนดหน่วยเลือกตั้ง/ที่เลือกตั้ง', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 25 วัน', anchor: 'before', from: 26, side: 'down' },
-  { id: 'voterobj', text: 'วันสุดท้ายผู้มีสิทธิเลือกตั้งยื่นคำร้องคัดค้านผู้สมัคร', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 20 วัน', anchor: 'before', from: 21, color: 'navy', side: 'down' },
-  { id: 'officials', text: 'วันสุดท้ายแต่งตั้ง กปน./รปภ.', anchor: 'before', from: 21, side: 'down' },
-  { id: 'notify', text: 'วันสุดท้ายแจ้งรายชื่อผู้มีสิทธิไปยังเจ้าบ้าน', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 15 วัน', anchor: 'before', from: 16, color: 'sky', side: 'down' },
-  { id: 'addname', text: 'วันสุดท้ายการเพิ่มชื่อ/ถอนชื่อ', anchor: 'before', from: 11, color: 'salmon', side: 'down' },
-  { id: 'unitchange', text: 'วันสุดท้ายเปลี่ยนแปลงเขตของหน่วยเลือกตั้ง', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 10 วัน', anchor: 'before', from: 11, side: 'down' },
-  { id: 'agents', text: 'วันสุดท้ายแต่งตั้งตัวแทนผู้สมัคร', note: 'ไม่น้อยกว่า 7 วันก่อนวันเลือกตั้ง', anchor: 'before', from: 8, color: 'yellow', side: 'up' },
-  { id: 'absentfirst', text: 'วันแรกแจ้งเหตุที่ทำให้ไม่อาจไปใช้สิทธิเลือกตั้ง', note: 'ภายใน 7 วัน ก่อนวันเลือกตั้ง', anchor: 'before', from: 7, color: 'slate', side: 'down' },
-  { id: 'training', text: 'อบรม กปน.', anchor: 'before', from: 4, color: 'sky', side: 'down' },
-  { id: 'boxes', text: 'จัดอุปกรณ์ฯ ลงหีบ', anchor: 'before', from: 4, side: 'down' },
+  { id: 'proclaim', text: 'ผอ.กต.ท้องถิ่น ประกาศ ส.ถ.1/1', detail: 'วันที่ ผอ.กต.ท้องถิ่น ประกาศให้มีการเลือกตั้ง (ม.12)', anchor: 'before', from: 51, side: 'up' },
+  { id: 'register', text: 'รับสมัคร', detail: 'วันรับสมัครรับเลือกตั้ง (ม.12)', note: 'ไม่น้อยกว่า 5 วัน', anchor: 'before', from: 48, to: 44, color: 'tan', side: 'up' },
+  { id: 'check', text: 'ตรวจสอบคุณสมบัติ', note: 'ภายใน 7 วันนับแต่วันปิดรับสมัคร', anchor: 'rule', ref: 'register', from: 1, to: 7, color: 'green', side: 'up', plan: false },
+  { id: 'announce', text: 'วันสุดท้ายประกาศรายชื่อผู้สมัคร', detail: 'วันสุดท้ายประกาศบัญชีรายชื่อผู้สมัคร (ม.52)', note: 'ภายหลังการตรวจสอบคุณสมบัติ', anchor: 'rule', ref: 'check', from: 0, side: 'up' },
+  { id: 'objection', text: 'ผู้สมัครมีสิทธิยื่นคำร้องคัดค้านสิทธิการสมัคร', note: 'ภายใน 3 วัน นับแต่วันประกาศรายชื่อผู้มีสิทธิสมัคร', anchor: 'rule', ref: 'announce', from: 1, to: 3, color: 'pink', side: 'up', plan: false },
+  // รายการที่มีเฉพาะในแผนงาน (chart: false)
+  { id: 'objectionlast', text: 'วันสุดท้ายยื่นคำร้องต่อ กกต. กรณีไม่รับสมัคร (ม.55)', note: 'ภายใน 3 วัน นับแต่วันประกาศรายชื่อผู้มีสิทธิสมัคร', anchor: 'rule', ref: 'objection', from: 0, side: 'up', chart: false },
+  { id: 'ballots', text: 'รายงานการสั่งซื้อบัตรเลือกตั้ง', detail: 'รายงานการสั่งซื้อบัตรเลือกตั้ง เมื่อ สนท.ประกาศบัญชีรายชื่อ (ส.ถ.1/5)', anchor: 'before', from: 30, side: 'up' },
+  { id: 'voterlist', text: 'วันสุดท้ายประกาศบัญชีรายชื่อผู้มีสิทธิเลือกตั้ง', detail: 'วันสุดท้ายประกาศบัญชีรายชื่อผู้มีสิทธิเลือกตั้ง (ส.ถ.1/5) ข้อ 71', anchor: 'before', from: 26, side: 'down' },
+  { id: 'units', text: 'วันสุดท้ายประกาศกำหนดหน่วยเลือกตั้ง/ที่เลือกตั้ง', detail: 'วันสุดท้ายประกาศกำหนดหน่วยเลือกตั้งและที่เลือกตั้ง ข้อ 16', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 25 วัน', anchor: 'before', from: 26, side: 'down' },
+  { id: 'voterobj', text: 'วันสุดท้ายผู้มีสิทธิเลือกตั้งยื่นคำร้องคัดค้านผู้สมัคร', detail: 'วันสุดท้ายผู้มีสิทธิเลือกตั้งยื่นคำร้องคัดค้านผู้สมัคร (ม.56)', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 20 วัน', anchor: 'before', from: 21, color: 'navy', side: 'down' },
+  { id: 'officials', text: 'วันสุดท้ายแต่งตั้ง กปน./รปภ.', detail: 'วันสุดท้ายแต่งตั้ง จพง.ปน. (ม.28)', anchor: 'before', from: 21, side: 'down' },
+  { id: 'notify', text: 'วันสุดท้ายแจ้งรายชื่อผู้มีสิทธิไปยังเจ้าบ้าน', detail: 'วันสุดท้ายแจ้งรายชื่อผู้มีสิทธิไปยังเจ้าบ้าน (ม.43)', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 15 วัน', anchor: 'before', from: 16, color: 'sky', side: 'down' },
+  { id: 'unitchange', text: 'วันสุดท้ายเปลี่ยนแปลงเขตของหน่วยเลือกตั้ง', detail: 'วันสุดท้ายเปลี่ยนแปลงเขตของหน่วยเลือกตั้ง/ที่เลือกตั้ง (ม.23)', note: 'ก่อนวันเลือกตั้งไม่น้อยกว่า 10 วัน', anchor: 'before', from: 11, side: 'down' },
+  { id: 'addname', text: 'วันสุดท้ายการเพิ่มชื่อ/ถอนชื่อ', detail: 'วันสุดท้ายเพิ่มชื่อ/ถอนชื่อ (ม.44, ม.45)', anchor: 'before', from: 11, color: 'salmon', side: 'down' },
+  { id: 'agents', text: 'วันสุดท้ายแต่งตั้งตัวแทนผู้สมัคร', detail: 'วันสุดท้ายแจ้งการแต่งตั้งตัวแทนผู้สมัคร (ม.58)', note: 'ไม่น้อยกว่า 7 วันก่อนวันเลือกตั้ง', anchor: 'before', from: 8, color: 'yellow', side: 'up' },
+  { id: 'absentfirst', text: 'วันแรกแจ้งเหตุที่ทำให้ไม่อาจไปใช้สิทธิเลือกตั้ง', note: 'ภายใน 7 วัน ก่อนวันเลือกตั้ง', anchor: 'before', from: 7, color: 'slate', side: 'down', plan: false },
+  { id: 'absentbefore', text: 'แจ้งเหตุที่ไม่อาจไปใช้สิทธิเลือกตั้ง (ม.40)', note: 'ภายใน 7 วัน ก่อนวันเลือกตั้ง', anchor: 'before', from: 7, to: 1, side: 'down', chart: false },
+  { id: 'training', text: 'อบรม กปน.', detail: 'วันสุดท้ายอบรมเจ้าพนักงานผู้ดำเนินการเลือกตั้ง', anchor: 'before', from: 4, color: 'sky', side: 'down' },
+  { id: 'boxes', text: 'จัดอุปกรณ์ฯ ลงหีบ', detail: 'จัดวัสดุอุปกรณ์ฯ ลงหีบ', anchor: 'before', from: 4, side: 'down' },
   { id: 'ready', text: 'รายงานความพร้อมก่อนวันเลือกตั้ง', anchor: 'before', from: 2, color: 'gold', side: 'up' },
-  { id: 'supplies', text: 'วันสุดท้ายจ่ายวัสดุ/อุปกรณ์ที่เลือกตั้ง', note: 'ก่อนวันเลือกตั้ง 1 วัน', anchor: 'before', from: 1, color: 'slate', side: 'down' },
-  { id: 'absentlast', text: 'วันสุดท้ายแจ้งเหตุที่ทำให้ไม่อาจไปใช้สิทธิเลือกตั้ง', note: 'ภายใน 7 วันนับแต่วันเลือกตั้ง', anchor: 'after', from: 7, color: 'green', side: 'down' },
+  { id: 'supplies', text: 'วันสุดท้ายจ่ายวัสดุ/อุปกรณ์ที่เลือกตั้ง', detail: 'วันมอบวัสดุอุปกรณ์การเลือกตั้งให้ กปน.', note: 'ก่อนวันเลือกตั้ง 1 วัน', anchor: 'before', from: 1, color: 'slate', side: 'down' },
+  { id: 'absentlast', text: 'วันสุดท้ายแจ้งเหตุที่ทำให้ไม่อาจไปใช้สิทธิเลือกตั้ง', note: 'ภายใน 7 วันนับแต่วันเลือกตั้ง', anchor: 'after', from: 7, color: 'green', side: 'down', plan: false },
+  { id: 'absentafter', text: 'แจ้งเหตุที่ไม่อาจไปใช้สิทธิเลือกตั้ง (ม.40)', note: 'ภายใน 7 วัน หลังวันเลือกตั้ง', anchor: 'after', from: 1, to: 7, side: 'down', chart: false },
+  { id: 'restrictsend', text: 'วันสุดท้ายจัดส่งบัญชีรายชื่อผู้มีสิทธิเลือกตั้งเพื่อจัดทำบัญชีผู้ถูกจำกัดสิทธิ (ระเบียบท้องถิ่นฯ ข้อ 216)', note: 'ภายใน 15 วันนับแต่วันประกาศผลการนับคะแนน', anchor: 'after', from: 15, side: 'down', chart: false },
+  { id: 'result30', text: 'วันสุดท้ายประกาศผลการเลือกตั้งตามมาตรา 17 วรรคหนึ่ง (กรณีไม่มีเรื่องร้องเรียน)', note: '30 วัน นับแต่วันเลือกตั้ง', anchor: 'after', from: 30, side: 'down', chart: false },
+  { id: 'result60', text: 'วันสุดท้ายประกาศผลการเลือกตั้งตามมาตรา 17 วรรคสอง', note: '60 วัน นับแต่วันเลือกตั้ง', anchor: 'after', from: 60, side: 'down', chart: false },
+  { id: 'restrictlist', text: 'วันสุดท้ายจัดทำบัญชีรายชื่อผู้ถูกจำกัดสิทธิ (ระเบียบท้องถิ่นฯ ข้อ 66)', note: '60 วัน นับแต่วันเลือกตั้ง', anchor: 'after', from: 60, side: 'down', chart: false },
 ];
 
 // กิจกรรมที่เลื่อนตามกิจกรรมก่อนหน้า [ลูก, แม่] ใช้แปลงกำหนดการที่บันทึกไว้จากรุ่นก่อน
@@ -108,7 +118,7 @@ const DEFAULT_HOLIDAYS = [
   '30/7/2569 วันเข้าพรรษา',
 ].join('\n');
 
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 
 const DEFAULT_CONFIG = {
   version: CONFIG_VERSION,
@@ -199,7 +209,33 @@ function normalizeRule(r) {
     to: hasTo ? asInt(r.to, null, min, 999) : null,
     color: asText(r.color),
     side: r.side === 'up' ? 'up' : 'down',
+    detail: asText(r.detail),
+    chart: r.chart !== false,
+    plan: r.plan !== false,
   };
+}
+
+// รุ่นก่อน (version < 3) ยังไม่มีแผนงาน: เติมข้อความแผนงานให้กิจกรรมมาตรฐานที่ยังไม่ได้เปลี่ยนชื่อ
+// และเพิ่มรายการที่มีเฉพาะในแผนงานต่อจากกิจกรรมก่อนหน้าในค่าเริ่มต้น
+function addPlanDetails(rules, defaults = DEFAULT_RULES) {
+  if (!Array.isArray(rules)) return rules;
+  const list = rules.map((r) => {
+    if (!r || typeof r !== 'object' || r.detail !== undefined) return r;
+    const d = DEFAULT_RULES.find((x) => x.id === r.id) || DEFAULT_RULES.find((x) => x.text === r.text);
+    if (!d || d.text !== r.text) return r;
+    return { ...r, detail: d.detail || '', chart: d.chart !== false, plan: d.plan !== false };
+  });
+  const has = (id) => list.some((r) => r && r.id === id);
+  defaults.forEach((d, i) => {
+    if (d.chart !== false || has(d.id) || (d.anchor === 'rule' && !has(d.ref))) return;
+    let at = list.length;
+    for (let k = i - 1; k >= 0; k--) {
+      const j = list.findIndex((r) => r && r.id === defaults[k].id);
+      if (j >= 0) { at = j + 1; break; }
+    }
+    list.splice(at, 0, clone(d));
+  });
+  return list;
 }
 
 // กำหนดการรุ่นก่อนไม่มี id และนับทุกกิจกรรมจากวันเลือกตั้ง → ผูกกิจกรรมตาม RULE_CHAIN โดยวันที่เท่าเดิม
@@ -327,8 +363,11 @@ function normalizeConfig(raw) {
   const rulesByCase = {};
   const savedRules = c.rulesByCase && typeof c.rulesByCase === 'object' ? c.rulesByCase : {};
   cases.forEach(({ id }) => {
-    const src = Array.isArray(savedRules[id]) ? savedRules[id] : d.rulesByCase[id] || [];
-    rulesByCase[id] = linkRuleChain(src).map(normalizeRule).filter(Boolean);
+    const saved = Array.isArray(savedRules[id]);
+    const src = saved ? savedRules[id] : d.rulesByCase[id] || [];
+    const linked = linkRuleChain(src);
+    const rules = saved && oldVersion ? addPlanDetails(linked, d.rulesByCase[id] || DEFAULT_RULES) : linked;
+    rulesByCase[id] = rules.map(normalizeRule).filter(Boolean);
   });
 
   return {
@@ -364,6 +403,7 @@ function loadConfig() {
   } else if (Array.isArray(legacy)) {
     cfg.rulesByCase.vacancy = shiftVacancy(legacy);
   }
+  if ((oldRules && typeof oldRules === 'object') || Array.isArray(legacy)) cfg.version = 1; // ให้เติมแผนงาน
   const oldHolidays = store.get(KEYS.oldHolidays, null);
   if (typeof oldHolidays === 'string') cfg.holidays = [...RECURRING_HOLIDAYS, oldHolidays].join('\n');
   return normalizeConfig(cfg);

@@ -107,7 +107,7 @@
     <span class="spacer"></span>
     <div class="actions">
       <a class="btn" href="#admin">ตั้งค่า (ผู้ดูแลระบบ)</a>
-      <button type="button" id="btn-csv" class="btn">ดาวน์โหลด Excel (CSV)</button>
+      <button type="button" id="btn-csv" class="btn">ดาวน์โหลดแผนงาน Excel (CSV)</button>
       <button type="button" id="btn-print" class="btn primary">พิมพ์ / บันทึก PDF</button>
     </div>
   </section>
@@ -126,9 +126,21 @@
   <!-- ทุกเขต: หน้าละเขตสำหรับพิมพ์ (ซ่อนบนจอ) -->
   <div id="print-copies" class="print-only"></div>
 
-  <section class="card summary-card" aria-labelledby="sum-title">
-    <h2 id="sum-title" class="card-title">สรุปกำหนดการ</h2>
-    <div class="table-wrap"><table id="summary" class="summary"></table></div>
+  <!-- แผนงาน: รายละเอียดแต่ละวัน พิมพ์แยกเป็น A4 แนวตั้ง -->
+  <section class="card plan-card" aria-labelledby="plan-title">
+    <div class="plan-bar no-print">
+      <h2 id="plan-title" class="card-title">แผนงาน · รายละเอียดแต่ละวัน</h2>
+      <span class="spacer"></span>
+      <button type="button" id="btn-print-plan" class="btn primary">พิมพ์แผนงาน / บันทึก PDF</button>
+    </div>
+    <p class="hint no-print">ข้อความในแผนงานแก้ได้ที่ ตั้งค่า → กำหนดการ (ช่อง "ข้อความในแผนงาน") หรือกด "แก้ไข" ที่วันนั้น · แยกชุดตามตำแหน่งและเขตที่เลือกไว้</p>
+    <div class="field plan-pick no-print" hidden>
+      <label for="plan-pick">แสดงชุด</label>
+      <select id="plan-pick"></select>
+    </div>
+    <div class="table-wrap"><div id="plan"></div></div>
+    <!-- พิมพ์แผนงาน: ทุกชุด ชุดละหน้าใหม่ (สร้างตอนกดพิมพ์) -->
+    <div id="plan-print" class="plan-print"></div>
   </section>
 </main>
 

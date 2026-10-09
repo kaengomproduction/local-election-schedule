@@ -150,14 +150,18 @@ function autoElectionISO(f) {
   ['office', 'orgNameCustom', 'caseText', 'limitDays'].forEach((k) => delete f[k]);
   if (typeof f.autoElection !== 'boolean') f.autoElection = !isISO(f.election) || f.election === autoElectionISO(f);
   if (f.customRules && typeof f.customRules === 'object') {
+    const old = f.rulesVersion !== CONFIG_VERSION; // กำหนดการที่แก้ไว้ก่อนมีแผนงาน
     Object.keys(f.customRules).forEach((k) => {
       const list = f.customRules[k];
-      if (Array.isArray(list)) f.customRules[k] = linkRuleChain(list).map(normalizeRule).filter(Boolean);
-      else delete f.customRules[k];
+      if (!Array.isArray(list)) { delete f.customRules[k]; return; }
+      const linked = linkRuleChain(list);
+      const rules = old ? addPlanDetails(linked, DEFAULT_CONFIG.rulesByCase[k] || DEFAULT_RULES) : linked;
+      f.customRules[k] = rules.map(normalizeRule).filter(Boolean);
     });
   } else {
     delete f.customRules;
   }
+  f.rulesVersion = CONFIG_VERSION;
   normalizeMemberElections(f);
 })(state.form);
 
@@ -254,23 +258,31 @@ function compute() {
   const events = rules.map((r, idx) => {
     const [s, e] = ruleRange(r, E, vEff, rules);
     const orphan = !!rulePos(r, rules).orphan;
-    return { idx, text: r.text, note: r.note, anchor: r.anchor, color: paletteOf(cfg(), r.color) ? r.color : '', side: r.side, s, e, orphan };
+    return {
+      idx, text: r.text, note: r.note, detail: r.detail || '', anchor: r.anchor,
+      color: paletteOf(cfg(), r.color) ? r.color : '', side: r.side, s, e, orphan,
+      chart: r.chart !== false, plan: r.plan !== false,
+    };
   });
+  // ตารางควบคุมแสดงเฉพาะกิจกรรม chart · แผนงานและแดชบอร์ดใช้กิจกรรม plan
+  const chartEvents = events.filter((ev) => ev.chart);
+  const planEvents = events.filter((ev) => ev.plan);
 
   // ตารางเริ่มวันรุ่งขึ้นหลังวันเริ่มต้น (ลาออกวันที่ 7 → เริ่มวันที่ 8)
-  const earliest = Math.min(vEff + 1, ...events.map((ev) => ev.s));
-  const latest = Math.max(E + afterDays, ...events.map((ev) => ev.e));
+  const earliest = Math.min(vEff + 1, ...chartEvents.map((ev) => ev.s));
+  const latest = Math.max(E + afterDays, ...chartEvents.map((ev) => ev.e));
   const top = [Math.max(earliest, E - MAX_SPAN), E - split];
   const bottom = [E - split + 1, Math.min(latest, E + 60)];
 
-  const holidays = buildHolidays(ymd(top[0]).y, ymd(bottom[1]).y);
+  const lastPlan = Math.max(bottom[1], ...planEvents.map((ev) => ev.e));
+  const holidays = buildHolidays(ymd(Math.min(top[0], vEff)).y, ymd(lastPlan).y);
   const colorMap = new Map();
-  events.forEach((ev) => {
+  chartEvents.forEach((ev) => {
     if (!ev.color) return;
     for (let n = ev.s; n <= ev.e; n++) colorMap.set(n, ev.color);
   });
 
-  return { E, V, vEff, limit, caseInfo, deadline: V == null ? null : V + limit, events, top, bottom, holidays, colorMap };
+  return { E, V, vEff, limit, caseInfo, deadline: V == null ? null : V + limit, events, chartEvents, planEvents, top, bottom, holidays, colorMap };
 }
 
 /* ---------------- วัดความกว้างข้อความ ---------------- */
@@ -480,7 +492,7 @@ function buildChart([a, b], ctx, uid) {
 
   // รวมกิจกรรมวันเดียวกัน ด้านเดียวกัน เป็นกล่องเดียว
   const groups = new Map();
-  for (const ev of ctx.events) {
+  for (const ev of ctx.chartEvents) {
     if (ev.s < a || ev.s > b) continue;
     const key = `${ev.side}|${ev.s}|${ev.e}`;
     if (!groups.has(key)) groups.set(key, { side: ev.side, s: ev.s, e: Math.min(ev.e, b), items: [] });
@@ -527,7 +539,7 @@ function buildChart([a, b], ctx, uid) {
     if (ctx.V != null && dn === ctx.V + 1) tip.push(`วันรุ่งขึ้นหลัง${ctx.caseInfo.start} (${fmtShort(ctx.V)})`);
     if (ctx.holidays.has(dn)) tip.push(ctx.holidays.get(dn));
     if (dn === ctx.deadline) tip.push('วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง');
-    ctx.events.forEach((ev) => { if (ev.s <= dn && dn <= ev.e) tip.push(`• ${ev.text}`); });
+    ctx.chartEvents.forEach((ev) => { if (ev.s <= dn && dn <= ev.e) tip.push(`• ${ev.text}`); });
 
     tip.push('(แตะเพื่อแก้ไขกำหนดการวันนี้)');
     svg += `<g class="cell" data-day="${dn}"><title>${esc(tip.join('\n'))}</title>`
@@ -702,27 +714,39 @@ function renderDashboard(ctx) {
       + `<div class="meter-foot"><span>${ctx.V != null ? startShort(caseInfo) : 'เริ่มนับ'} ${esc(fmtShort(vEff))}</span><span>เลือกตั้ง ${esc(fmtShort(E))}</span></div>`;
   }
 
-  // ตัวชี้วัด
-  const kpis = [];
+  // นับถอยหลังถึงวันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง (ในกรอบสีน้ำเงิน)
+  let deadline;
   if (ctx.deadline != null) {
     const left = ctx.deadline - TODAY;
     const margin = ctx.deadline - E;
-    kpis.push(kpi(`ครบกำหนด ${limit} วัน`, left >= 0 ? inDays(left) : `เลยกำหนด ${-left} วัน`,
-      `${fmtRange(ctx.deadline, ctx.deadline)} · ${margin > 0 ? `เลือกตั้งก่อนครบกำหนด ${margin} วัน` : margin === 0 ? 'เลือกตั้งตรงวันครบกำหนด' : `วันเลือกตั้งเกินกำหนด ${-margin} วัน`}`));
+    const figure = left > 0 ? `<span class="dl-pre">อีก</span><b>${left}</b><span class="dl-unit">วัน</span>`
+      : left === 0 ? '<b class="dl-word">วันนี้</b>'
+      : `<span class="dl-pre">เลยกำหนด</span><b>${-left}</b><span class="dl-unit">วัน</span>`;
+    deadline = `<div class="dl-text">`
+      + `<div class="dl-label">วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง</div>`
+      + `<div class="dl-date">${esc(fmtFull(ctx.deadline))} <span class="dl-limit">(ภายใน ${limit} วัน)</span></div>`
+      + `<div class="dl-sub">${margin > 0 ? `วันเลือกตั้งก่อนครบกำหนด ${margin} วัน` : margin === 0 ? 'วันเลือกตั้งตรงกับวันครบกำหนด' : `วันเลือกตั้งเกินกำหนด ${-margin} วัน`}</div>`
+      + `</div><div class="dl-figure" aria-label="${esc(left >= 0 ? inDays(left) : `เลยกำหนด ${-left} วัน`)}">${figure}</div>`;
   } else {
-    kpis.push(kpi(`ครบกำหนด ${limit} วัน`, '—', `กรอก${caseInfo.start}เพื่อคำนวณ`));
+    deadline = `<div class="dl-text"><div class="dl-label">วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง (ภายใน ${limit} วัน)</div>`
+      + `<div class="dl-sub">กรอก${esc(caseInfo.start)}เพื่อคำนวณ</div></div>`;
   }
+  const late = ctx.deadline != null && ctx.deadline < TODAY;
+
+  // ตัวชี้วัด
+  const kpis = [];
   if (TODAY > E) kpis.push(kpi('ช่วงปัจจุบัน', 'หลังเลือกตั้ง', `หลังวันเลือกตั้ง ${TODAY - E} วัน`));
   else if (TODAY === E) kpis.push(kpi('ช่วงปัจจุบัน', 'วันเลือกตั้ง', `ลงคะแนน ${fmtTime(pollOpen)}–${fmtTime(pollClose)} น.`));
   else if (TODAY <= vEff) kpis.push(kpi('ช่วงปัจจุบัน', 'ยังไม่เริ่ม', `เริ่ม ${fmtShort(vEff + 1)}`));
   else if (diff >= split) kpis.push(kpi('ช่วงปัจจุบัน', 'ช่วงที่ 1', `อีก ${diff - split + 1} วันเข้าช่วงที่ 2`));
   else kpis.push(kpi('ช่วงปัจจุบัน', 'ช่วงที่ 2', `${split - 1} วันสุดท้ายก่อนวันเลือกตั้ง`));
 
-  const rows = summaryRows(ctx);
-  const doneCount = ctx.events.filter((ev) => ev.e < TODAY).length;
-  const nowCount = ctx.events.filter((ev) => ev.s <= TODAY && TODAY <= ev.e).length;
-  kpis.push(kpi('กิจกรรมเสร็จแล้ว', `${doneCount}/${ctx.events.length}`,
-    `กำลังดำเนินการ ${nowCount} · รอดำเนินการ ${ctx.events.length - doneCount - nowCount}`));
+  const rows = planRows(ctx);
+  const tasks = ctx.planEvents;
+  const doneCount = tasks.filter((ev) => ev.e < TODAY).length;
+  const nowCount = tasks.filter((ev) => ev.s <= TODAY && TODAY <= ev.e).length;
+  kpis.push(kpi('กิจกรรมเสร็จแล้ว', `${doneCount}/${tasks.length}`,
+    `กำลังดำเนินการ ${nowCount} · รอดำเนินการ ${tasks.length - doneCount - nowCount}`));
 
   // กิจกรรมวันนี้
   const today = rows.filter((r) => r.s <= TODAY && TODAY <= r.e);
@@ -745,7 +769,7 @@ function renderDashboard(ctx) {
       + `<div class="task-text"><span class="sw"${fill ? ` style="background:${fill}"` : ''}></span>${esc(r.text)}</div>`
       + `<div class="task-sub">${esc(fmtRange(r.s, r.e))}</div></div></li>`;
   }).join('') : '<li class="none">ไม่มีกิจกรรมที่เหลืออยู่</li>';
-  const more = next.length > UPCOMING_LIMIT ? `<a class="more" href="#sum-title">และอีก ${next.length - UPCOMING_LIMIT} กิจกรรม · ดูทั้งหมด</a>` : '';
+  const more = next.length > UPCOMING_LIMIT ? `<a class="more" href="#plan-title">และอีก ${next.length - UPCOMING_LIMIT} กิจกรรม · ดูแผนงานทั้งหมด</a>` : '';
 
   el.innerHTML = `
     <div class="dash-hero${diff === 0 ? ' is-today' : ''}">
@@ -754,6 +778,7 @@ function renderDashboard(ctx) {
         <div class="hero-figure"><span class="hero-value">${esc(hero.value)}</span>${hero.unit ? `<span class="hero-unit">${hero.unit}</span>` : ''}</div>
         <div class="hero-date">${esc(hero.sub)}</div>
       </div>
+      <div class="hero-deadline${late ? ' late' : ''}">${deadline}</div>
       <div class="clock" id="dash-clock">
         <div class="clock-label" data-k="label"></div>
         <div class="clock-units" data-k="units">
@@ -837,31 +862,118 @@ function renderNotes(ctx) {
   $('#notes').innerHTML = `<div class="notes-box"><div class="notes-title">หมายเหตุ</div><ul>${notes.map((s) => `<li>${esc(s)}</li>`).join('')}</ul></div>`;
 }
 
-function summaryRows(ctx) {
-  const rows = ctx.events.map((ev) => ({ s: ev.s, e: ev.e, text: ev.text, note: ev.note, color: ev.color }));
-  rows.push({ s: ctx.E, e: ctx.E, text: 'วันเลือกตั้ง', note: '', election: true });
-  if (ctx.V != null) {
-    rows.push({ s: ctx.deadline, e: ctx.deadline, text: 'วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง', note: `ภายใน ${ctx.limit} วันนับแต่${ctx.caseInfo.start}`, deadline: true });
-  }
-  return rows.sort((p, q) => p.s - q.s || p.e - q.e);
+/* ---------------- แผนงาน (รายละเอียดแต่ละวัน) ---------------- */
+
+// ข้อความแผนงาน: แทน {จังหวัด} {อำเภอ} {อปท} ด้วยข้อมูลการเลือกตั้งนี้
+function planText(ev, f = state.form) {
+  const t = orgTypeOf(f);
+  const province = stripPrefix(f.province, ['จังหวัด', 'จ.']);
+  const district = stripPrefix(f.district, ['อำเภอ', 'อ.']);
+  const org = `${t.name}${t.useProvince ? province : String(f.orgName || '').trim()}`;
+  return (ev.detail || ev.text)
+    .replace(/\{จังหวัด\}/g, province)
+    .replace(/\{อำเภอ\}/g, district)
+    .replace(/\{อปท\}/g, org);
 }
 
-function renderSummary(ctx) {
-  const head = '<thead><tr><th class="num">ลำดับ</th><th>วันที่</th><th class="num">นับถอยหลัง (วัน)</th><th>กิจกรรม</th></tr></thead>';
-  const body = summaryRows(ctx).map((r, i) => {
-    const now = r.s <= TODAY && TODAY <= r.e;
-    const cls = [r.e < TODAY ? 'past' : '', now ? 'now' : '', r.election ? 'election' : '', r.deadline ? 'deadline' : ''].filter(Boolean).join(' ');
-    const fill = r.election ? RED : fillOf(r.color);
-    return `<tr class="${cls}">`
-      + `<td class="num">${i + 1}</td>`
-      + `<td class="date">${esc(fmtRange(r.s, r.e))}</td>`
-      + `<td class="num">${esc(cdText(ctx.E, r.s, r.e))}</td>`
-      + `<td><button type="button" class="row-edit no-print" data-day="${r.s}" aria-label="${esc(`แก้ไขกำหนดการ ${fmtRange(r.s, r.s)}`)}">แก้ไข</button>`
-      + `<span class="sw"${fill ? ` style="background:${fill}"` : ''}></span>${esc(r.text)}`
-      + `${now ? '<span class="badge">วันนี้</span>' : ''}`
-      + `${r.note ? `<span class="note">(${esc(r.note)})</span>` : ''}</td></tr>`;
+function planRows(ctx, f = state.form) {
+  const rows = ctx.planEvents.map((ev) => ({ s: ev.s, e: ev.e, idx: ev.idx, text: planText(ev, f), note: ev.note, color: ev.color }));
+  rows.push({ s: ctx.E, e: ctx.E, idx: -1, text: 'วันเลือกตั้ง', note: '', election: true });
+  return rows.sort((p, q) => p.s - q.s || p.e - q.e || p.idx - q.idx);
+}
+
+// "1 ต.ค.69", "5 - 9 ต.ค.69", "28 ต.ค.- 3 พ.ย.69"
+function planDate(s, e) {
+  const A = ymd(s), B = ymd(e);
+  const yy = (t) => String(be(t.y)).slice(-2);
+  if (s === e) return `${A.d} ${TH_MONTHS_SHORT[A.m]}${yy(A)}`;
+  if (A.y === B.y && A.m === B.m) return `${A.d} - ${B.d} ${TH_MONTHS_SHORT[A.m]}${yy(A)}`;
+  if (A.y === B.y) return `${A.d} ${TH_MONTHS_SHORT[A.m]}- ${B.d} ${TH_MONTHS_SHORT[B.m]}${yy(B)}`;
+  return `${A.d} ${TH_MONTHS_SHORT[A.m]}${yy(A)} - ${B.d} ${TH_MONTHS_SHORT[B.m]}${yy(B)}`;
+}
+
+// เดือน → วันที่ (หรือช่วงวันที่เดียวกัน) → รายการ
+function planGroups(ctx, f = state.form) {
+  const months = [];
+  planRows(ctx, f).forEach((r) => {
+    const t = ymd(r.s);
+    const label = `${TH_MONTHS[t.m]} ${be(t.y)}`;
+    let month = months[months.length - 1];
+    if (!month || month.label !== label) months.push(month = { label, days: [] });
+    let day = month.days[month.days.length - 1];
+    if (!day || day.s !== r.s || day.e !== r.e) month.days.push(day = { s: r.s, e: r.e, items: [] });
+    day.items.push(r);
+  });
+  return months;
+}
+
+const planTitle = (f = state.form) => `แผนงานการจัด${electionTitle(f)}`;
+
+// แผนงานแยกชุดตามการเลือกตั้งแต่ละแถวและแต่ละเขต (ทุกเขต = ชุดละเขต) เหมือนการพิมพ์ตารางควบคุม
+function planSets(f = state.form) {
+  const seen = new Set();
+  return printElectionsFor(f).filter((x) => {
+    const t = electionTitle(x);
+    return !seen.has(t) && seen.add(t);
+  });
+}
+
+let planPick = 0; // ชุดที่แสดงบนจอ
+
+// แผนงาน 1 ชุด · editable: ปุ่มแก้ไขและป้ายวันนี้ (เฉพาะบนจอ)
+function planSheet(ctx, f, editable) {
+  const body = planGroups(ctx, f).map((month) => {
+    const head = `<tbody class="plan-month"><tr><th colspan="3" scope="colgroup">${esc(month.label)}</th></tr></tbody>`;
+    return head + month.days.map((day) => {
+      const now = day.s <= TODAY && TODAY <= day.e;
+      const cls = ['plan-day', day.e < TODAY ? 'past' : '', now ? 'now' : '', day.items.some((r) => r.election) ? 'election' : ''].filter(Boolean).join(' ');
+      const rows = day.items.map((r, i) => {
+        const date = i ? '' : `<td class="plan-date" rowspan="${day.items.length}">${esc(planDate(day.s, day.e))}`
+          + (editable ? `${now ? '<span class="badge no-print">วันนี้</span>' : ''}`
+            + `<button type="button" class="plan-edit no-print" data-day="${day.s}" aria-label="${esc(`แก้ไขกำหนดการ ${fmtFull(day.s)}`)}">แก้ไข</button>` : '')
+          + '</td>';
+        return `<tr${i ? ' class="cont"' : ''}>${date}`
+          + `<td class="plan-act">${r.election ? `<b>- ${esc(r.text)}</b>` : `- ${esc(r.text)}`}</td>`
+          + `<td class="plan-note">${esc(r.note || '')}</td></tr>`;
+      }).join('');
+      return `<tbody class="${cls}">${rows}</tbody>`;
+    }).join('');
   }).join('');
-  $('#summary').innerHTML = `${head}<tbody>${body}</tbody>`;
+
+  return `<div class="plan-sheet"><header class="plan-head"><h2>${esc(planTitle(f))}</h2>`
+    + `<p>เลือกตั้งใน${esc(fmtFull(ctx.E))}</p></header>`
+    + '<table class="plan-table"><colgroup><col class="c-date"><col><col class="c-note"></colgroup>'
+    + '<thead><tr><th scope="col">วัน/เดือน/ปี</th><th scope="col">การดำเนินการ</th><th scope="col">หมายเหตุ</th></tr></thead>'
+    + `${body}</table></div>`;
+}
+
+function renderPlan(ctx) {
+  const sets = planSets();
+  planPick = Math.min(planPick, sets.length - 1);
+  const pick = $('#plan-pick');
+  pick.closest('.field').hidden = sets.length < 2;
+  pick.replaceChildren(...sets.map((x, i) => h('option', { value: i }, `ชุดที่ ${i + 1}/${sets.length} · ${electionTitle(x)}`)));
+  pick.value = String(planPick);
+  $('#btn-print-plan').textContent = sets.length > 1 ? `พิมพ์แผนงาน / บันทึก PDF (${sets.length} ชุด)` : 'พิมพ์แผนงาน / บันทึก PDF';
+  $('#plan').innerHTML = planSheet(ctx, sets[planPick], true);
+}
+
+// พิมพ์แผนงานทุกชุด ชุดละหน้าใหม่ บนกระดาษ A4 แนวตั้ง (ตารางควบคุมพิมพ์แนวนอนตามปกติ)
+function printPlan() {
+  if (!lastCtx) return;
+  const box = $('#plan-print');
+  box.innerHTML = planSets().map((x) => planSheet(lastCtx, x, false)).join('');
+  const page = h('style', { id: 'plan-page' }, '@page { size: A4 portrait; margin: 12mm 15mm; }');
+  document.head.append(page);
+  document.body.classList.add('print-plan');
+  const done = () => {
+    page.remove();
+    document.body.classList.remove('print-plan');
+    box.innerHTML = '';
+    window.removeEventListener('afterprint', done);
+  };
+  window.addEventListener('afterprint', done);
+  window.print();
 }
 
 // แจ้งเมื่อตารางนี้ใช้กำหนดการที่แก้เอง
@@ -905,14 +1017,14 @@ function render() {
   renderDashboard(ctx);
   if (!ctx) {
     $('#charts').innerHTML = '<p class="empty">กรุณาเลือกวันเลือกตั้งเพื่อสร้างตาราง</p>';
-    ['#notes', '#summary', '#alerts'].forEach((s) => { $(s).innerHTML = ''; });
+    ['#notes', '#plan', '#alerts'].forEach((s) => { $(s).innerHTML = ''; });
     renderPrintCopies(null);
     return;
   }
   renderAlerts(ctx);
   renderCharts(ctx);
   renderNotes(ctx);
-  renderSummary(ctx);
+  renderPlan(ctx);
   renderPrintCopies(ctx);
 }
 
@@ -1174,12 +1286,21 @@ function downloadFile(name, content, type) {
 }
 
 function downloadCSV(ctx) {
-  const rows = [['ลำดับ', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'นับถอยหลัง (วัน)', 'กิจกรรม', 'หมายเหตุ']];
-  summaryRows(ctx).forEach((r, i) => {
-    rows.push([i + 1, fmtFull(r.s), r.e !== r.s ? fmtFull(r.e) : '', cdText(ctx.E, r.s, r.e), r.text, r.note || '']);
+  // รูปแบบเดียวกับแผนงาน: ทุกชุดต่อกัน แต่ละชุดมีชื่อ แถวเดือน แล้วรายการของแต่ละวัน
+  const rows = [];
+  planSets().forEach((f, k) => {
+    if (k) rows.push([]);
+    rows.push([planTitle(f)], [`เลือกตั้งใน${fmtFull(ctx.E)}`], [],
+      ['วัน/เดือน/ปี', 'การดำเนินการ', 'หมายเหตุ', 'นับถอยหลัง (วัน)', 'วันที่เริ่ม', 'วันที่สิ้นสุด']);
+    planGroups(ctx, f).forEach((month) => {
+      rows.push([month.label]);
+      month.days.forEach((day) => day.items.forEach((r, i) => {
+        rows.push([i ? '' : planDate(day.s, day.e), `- ${r.text}`, r.note || '', cdText(ctx.E, r.s, r.e), toISO(r.s), toISO(r.e)]);
+      }));
+    });
   });
   const csv = '﻿' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-  downloadFile(`ตารางควบคุมการเลือกตั้ง_${toISO(ctx.E)}.csv`, csv, 'text/csv;charset=utf-8');
+  downloadFile(`แผนงานการเลือกตั้ง_${toISO(ctx.E)}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 /* ---------------- ใช้การตั้งค่าใหม่ (หลังบันทึกจากหน้าผู้ดูแลระบบ) ---------------- */
@@ -1225,14 +1346,19 @@ function init() {
   bindAdditionalMembers();
   bindView();
   $('#btn-print').addEventListener('click', () => window.print());
+  $('#btn-print-plan').addEventListener('click', printPlan);
+  $('#plan-pick').addEventListener('change', (e) => {
+    planPick = Number(e.target.value) || 0;
+    if (lastCtx) renderPlan(lastCtx);
+  });
   $('#btn-csv').addEventListener('click', () => { if (lastCtx) downloadCSV(lastCtx); });
-  // แตะช่องวันที่ กล่องข้อความ หรือปุ่ม "แก้ไข" ในตารางสรุป → เปิดหน้าต่างแก้กำหนดการของวันนั้น
+  // แตะช่องวันที่ กล่องข้อความ หรือปุ่ม "แก้ไข" ในแผนงาน → เปิดหน้าต่างแก้กำหนดการของวันนั้น
   const openFromEvent = (e) => {
     const el = e.target.closest('[data-day]');
     if (el && lastCtx) openDayEditor(Number(el.dataset.day));
   };
   $('#charts').addEventListener('click', openFromEvent);
-  $('#summary').addEventListener('click', openFromEvent);
+  $('#plan').addEventListener('click', openFromEvent);
   $('#custom-banner').addEventListener('click', onCustomBanner);
   window.addEventListener('hashchange', route);
   route();

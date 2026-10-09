@@ -8,7 +8,7 @@
 const dayEd = { day: null, rules: null, shown: [], initial: '', combo: null };
 
 const dayDlg = document.getElementById('day-dlg');
-const newRule = () => ({ id: newId('r'), text: '', note: '', anchor: 'before', ref: null, from: 0, to: null, color: '', side: 'down' });
+const newRule = () => ({ id: newId('r'), text: '', note: '', anchor: 'before', ref: null, from: 0, to: null, color: '', side: 'down', detail: '', chart: true, plan: true });
 const rangeOf = (r) => ruleRange(r, lastCtx.E, lastCtx.vEff, dayEd.rules);
 const moveRule = (r, s, e) => setRuleRange(r, s, e, lastCtx.E, lastCtx.vEff, dayEd.rules);
 const covers = (r, day) => { const [s, e] = rangeOf(r); return s <= day && day <= e; };
@@ -103,7 +103,16 @@ function dayCard(r) {
           }),
         })),
       h('label', { class: 'field' }, 'สีช่อง', color),
-      h('label', { class: 'field' }, 'ข้อความ', side)));
+      h('label', { class: 'field' }, 'ข้อความ', side),
+      h('label', { class: 'field span-4' }, 'ข้อความในแผนงาน (ว่าง = ใช้ชื่อกิจกรรม)',
+        h('input', { type: 'text', value: r.detail || '', placeholder: r.text || '—', oninput: (ev) => { r.detail = ev.target.value; } }))),
+    h('div', { class: 'day-flags' },
+      h('label', { class: 'check small' },
+        h('input', { type: 'checkbox', checked: r.chart !== false, onchange: (ev) => { r.chart = ev.target.checked; } }),
+        'แสดงในตารางควบคุม'),
+      h('label', { class: 'check small' },
+        h('input', { type: 'checkbox', checked: r.plan !== false, onchange: (ev) => { r.plan = ev.target.checked; } }),
+        'แสดงในแผนงาน')));
 }
 
 function renderDayEditor() {
