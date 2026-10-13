@@ -116,11 +116,10 @@ function dayCard(r) {
 }
 
 function renderDayEditor() {
-  const { E, vEff, deadline, holidays, caseInfo } = lastCtx;
+  const { E, deadline, holidays, caseInfo } = lastCtx;
   const day = dayEd.day;
   document.getElementById('day-title').textContent = fmtFull(day);
   const facts = [dayLabel(day), caseInfo.name];
-  if (day >= vEff) facts.splice(1, 0, `วันที่ ${day - vEff} นับจาก${caseInfo.start}`);
   if (holidays.has(day)) facts.push(holidays.get(day));
   if (day === deadline) facts.push('วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง');
   document.getElementById('day-sub').textContent = facts.join(' · ');

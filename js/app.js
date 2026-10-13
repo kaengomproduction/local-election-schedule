@@ -18,7 +18,7 @@ const HOLI = '#D40000';
 
 // ขนาดตาราง (หน่วย px ใน viewBox)
 const G = {
-  labelW: 150, colW: 42, rowA: 42, rowB: 36, rowC: 36,
+  labelW: 150, colW: 42, rowA: 42, rowB: 36,
   fs: 13.5, fsNote: 12.5, lh: 18, pad: 4,
   g0: 18, gap: 6, arm: 12, bracket: 9, margin: 10,
 };
@@ -268,8 +268,8 @@ function compute() {
   const chartEvents = events.filter((ev) => ev.chart);
   const planEvents = events.filter((ev) => ev.plan);
 
-  // ตารางเริ่มที่วันเริ่มต้น = วันที่ 0 (ลาออกวันที่ 7 → ช่องแรกวันที่ 7 · กิจกรรมเริ่มวันรุ่งขึ้นวันที่ 8)
-  const earliest = Math.min(vEff, ...chartEvents.map((ev) => ev.s));
+  // ตารางเริ่มวันรุ่งขึ้นหลังวันเริ่มต้น (ลาออกวันที่ 7 → เริ่มวันที่ 8)
+  const earliest = Math.min(vEff + 1, ...chartEvents.map((ev) => ev.s));
   const latest = Math.max(E + afterDays, ...chartEvents.map((ev) => ev.e));
   const top = [Math.max(earliest, E - MAX_SPAN), E - split];
   const bottom = [E - split + 1, Math.min(latest, E + 60)];
@@ -509,8 +509,7 @@ function buildChart([a, b], ctx, uid) {
   const downs = layoutSide(callouts.filter((c) => c.side === 'down'), W);
   const ext = (pl) => pl.reduce((m, p) => Math.max(m, p.d + p.c.h), 0);
   const gridTop = ext(ups) + G.margin;
-  const rowC = gridTop + G.rowA + G.rowB; // แถวนับจากวันเริ่มต้น
-  const gridH = G.rowA + G.rowB + G.rowC;
+  const gridH = G.rowA + G.rowB;
   const gridBottom = gridTop + gridH;
   const H = Math.ceil(gridBottom + ext(downs) + G.margin);
 
@@ -519,9 +518,7 @@ function buildChart([a, b], ctx, uid) {
     + `<text x="${G.labelW / 2}" y="${gridTop + G.rowA / 2 + 5}" font-size="14" font-weight="700" text-anchor="middle" fill="${INK}">${esc(monthLabel(a, b))}</text>`
     + `<text font-size="12.5" font-weight="600" text-anchor="middle" fill="${INK}">`
     + `<tspan x="${G.labelW / 2}" y="${gridTop + G.rowA + 15}">นับถอยหลัง</tspan>`
-    + `<tspan x="${G.labelW / 2}" y="${gridTop + G.rowA + 30}">ถึงวันเลือกตั้ง</tspan>`
-    + `<tspan x="${G.labelW / 2}" y="${rowC + 15}">นับจาก</tspan>`
-    + `<tspan x="${G.labelW / 2}" y="${rowC + 30}">${esc(ctx.caseInfo.start)}</tspan></text>`;
+    + `<tspan x="${G.labelW / 2}" y="${gridTop + G.rowA + 30}">ถึงวันเลือกตั้ง</tspan></text>`;
 
   // ช่องวันที่
   for (let i = 0; i < n; i++) {
@@ -537,11 +534,8 @@ function buildChart([a, b], ctx, uid) {
     const ink = dark ? (off ? '#FFE45C' : '#fff') : (off ? HOLI : INK);
     const sub = dark ? (off ? '#FFE45C' : '#E8EEFF') : (off ? HOLI : '#6B7280');
     const cd = countOf(ctx.E, dn);
-    const fc = dn - ctx.vEff; // วันเริ่มต้น (วันที่ลาออก/ตำแหน่งว่าง) = 0
 
     const tip = [fmtFull(dn), dn < ctx.E ? `อีก ${ctx.E - dn} วันถึงวันเลือกตั้ง` : isE ? 'วันเลือกตั้ง' : `หลังวันเลือกตั้ง ${dn - ctx.E} วัน`];
-    if (dn >= ctx.vEff) tip.push(`วันที่ ${dn - ctx.vEff} นับจาก${ctx.caseInfo.start}`);
-    if (ctx.V != null && dn === ctx.V) tip.push(ctx.caseInfo.start);
     if (ctx.V != null && dn === ctx.V + 1) tip.push(`วันรุ่งขึ้นหลัง${ctx.caseInfo.start} (${fmtShort(ctx.V)})`);
     if (ctx.holidays.has(dn)) tip.push(ctx.holidays.get(dn));
     if (dn === ctx.deadline) tip.push('วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง');
@@ -553,13 +547,11 @@ function buildChart([a, b], ctx, uid) {
       + `<text x="${cx}" y="${gridTop + 13}" font-size="10.5" fill="${sub}" text-anchor="middle">${TH_DAYS_ABBR[t.w]}</text>`
       + `<text x="${cx}" y="${gridTop + G.rowA - 8}" font-size="16" font-weight="${isE ? 700 : 600}" fill="${ink}" text-anchor="middle">${t.d}</text>`
       + `<text x="${cx}" y="${gridTop + G.rowA + G.rowB / 2 + 5.5}" font-size="15" font-weight="${isE ? 700 : 400}" fill="${ink}" text-anchor="middle">${cd}</text>`
-      + (fc >= 0 ? `<text x="${cx}" y="${rowC + G.rowC / 2 + 5.5}" font-size="15" font-weight="${fc === 0 || dn === ctx.deadline ? 700 : 400}" fill="${ink}" text-anchor="middle">${fc}</text>` : '')
       + '</g>';
   }
 
   // เส้นตาราง (เส้นหนา = ขึ้นเดือนใหม่)
-  svg += `<line x1="0" x2="${W}" y1="${gridTop + G.rowA}" y2="${gridTop + G.rowA}" stroke="#555" stroke-width="0.8"/>`
-    + `<line x1="0" x2="${W}" y1="${rowC}" y2="${rowC}" stroke="#555" stroke-width="0.8"/>`;
+  svg += `<line x1="0" x2="${W}" y1="${gridTop + G.rowA}" y2="${gridTop + G.rowA}" stroke="#555" stroke-width="0.8"/>`;
   for (let i = 0; i <= n; i++) {
     const x = colX(i);
     const monthStart = i > 0 && i < n && ymd(a + i).d === 1;
@@ -1299,12 +1291,11 @@ function downloadCSV(ctx) {
   planSets().forEach((f, k) => {
     if (k) rows.push([]);
     rows.push([planTitle(f)], [`เลือกตั้งใน${fmtFull(ctx.E)}`], [],
-      ['วัน/เดือน/ปี', 'การดำเนินการ', 'หมายเหตุ', 'นับถอยหลัง (วัน)', `นับจาก${ctx.caseInfo.start} (วัน)`, 'วันที่เริ่ม', 'วันที่สิ้นสุด']);
+      ['วัน/เดือน/ปี', 'การดำเนินการ', 'หมายเหตุ', 'นับถอยหลัง (วัน)', 'วันที่เริ่ม', 'วันที่สิ้นสุด']);
     planGroups(ctx, f).forEach((month) => {
       rows.push([month.label]);
       month.days.forEach((day) => day.items.forEach((r, i) => {
-        const from = r.s === r.e ? `${r.s - ctx.vEff}` : `${r.s - ctx.vEff} – ${r.e - ctx.vEff}`;
-        rows.push([i ? '' : planDate(day.s, day.e), `- ${r.text}`, r.note || '', cdText(ctx.E, r.s, r.e), from, toISO(r.s), toISO(r.e)]);
+        rows.push([i ? '' : planDate(day.s, day.e), `- ${r.text}`, r.note || '', cdText(ctx.E, r.s, r.e), toISO(r.s), toISO(r.e)]);
       }));
     });
   });
