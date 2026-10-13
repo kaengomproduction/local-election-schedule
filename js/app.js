@@ -268,8 +268,8 @@ function compute() {
   const chartEvents = events.filter((ev) => ev.chart);
   const planEvents = events.filter((ev) => ev.plan);
 
-  // ตารางเริ่มวันรุ่งขึ้นหลังวันเริ่มต้น (ลาออกวันที่ 7 → เริ่มวันที่ 8)
-  const earliest = Math.min(vEff + 1, ...chartEvents.map((ev) => ev.s));
+  // ตารางเริ่มที่วันเริ่มต้น (ลาออกวันที่ 7 = นับถอยหลัง 60) · กิจกรรมเริ่มวันรุ่งขึ้นวันที่ 8
+  const earliest = Math.min(vEff, ...chartEvents.map((ev) => ev.s));
   const latest = Math.max(E + afterDays, ...chartEvents.map((ev) => ev.e));
   const top = [Math.max(earliest, E - MAX_SPAN), E - split];
   const bottom = [E - split + 1, Math.min(latest, E + 60)];
@@ -536,6 +536,7 @@ function buildChart([a, b], ctx, uid) {
     const cd = countOf(ctx.E, dn);
 
     const tip = [fmtFull(dn), dn < ctx.E ? `อีก ${ctx.E - dn} วันถึงวันเลือกตั้ง` : isE ? 'วันเลือกตั้ง' : `หลังวันเลือกตั้ง ${dn - ctx.E} วัน`];
+    if (ctx.V != null && dn === ctx.V) tip.push(ctx.caseInfo.start);
     if (ctx.V != null && dn === ctx.V + 1) tip.push(`วันรุ่งขึ้นหลัง${ctx.caseInfo.start} (${fmtShort(ctx.V)})`);
     if (ctx.holidays.has(dn)) tip.push(ctx.holidays.get(dn));
     if (dn === ctx.deadline) tip.push('วันสุดท้ายที่ต้องจัดให้มีการเลือกตั้ง');
