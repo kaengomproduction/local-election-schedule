@@ -1273,7 +1273,7 @@ function bindView() {
   sync();
 }
 
-/* ---------------- CSV ---------------- */
+/* ---------------- ดาวน์โหลดไฟล์ (สำรองการตั้งค่า) ---------------- */
 
 function downloadFile(name, content, type) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -1284,24 +1284,6 @@ function downloadFile(name, content, type) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function downloadCSV(ctx) {
-  // รูปแบบเดียวกับแผนงาน: ทุกชุดต่อกัน แต่ละชุดมีชื่อ แถวเดือน แล้วรายการของแต่ละวัน
-  const rows = [];
-  planSets().forEach((f, k) => {
-    if (k) rows.push([]);
-    rows.push([planTitle(f)], [`เลือกตั้งใน${fmtFull(ctx.E)}`], [],
-      ['วัน/เดือน/ปี', 'การดำเนินการ', 'หมายเหตุ', 'นับถอยหลัง (วัน)', 'วันที่เริ่ม', 'วันที่สิ้นสุด']);
-    planGroups(ctx, f).forEach((month) => {
-      rows.push([month.label]);
-      month.days.forEach((day) => day.items.forEach((r, i) => {
-        rows.push([i ? '' : planDate(day.s, day.e), `- ${r.text}`, r.note || '', cdText(ctx.E, r.s, r.e), toISO(r.s), toISO(r.e)]);
-      }));
-    });
-  });
-  const csv = '﻿' + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
-  downloadFile(`แผนงานการเลือกตั้ง_${toISO(ctx.E)}.csv`, csv, 'text/csv;charset=utf-8');
 }
 
 /* ---------------- ใช้การตั้งค่าใหม่ (หลังบันทึกจากหน้าผู้ดูแลระบบ) ---------------- */
@@ -1352,7 +1334,6 @@ function init() {
     planPick = Number(e.target.value) || 0;
     if (lastCtx) renderPlan(lastCtx);
   });
-  $('#btn-csv').addEventListener('click', () => { if (lastCtx) downloadCSV(lastCtx); });
   // แตะช่องวันที่ กล่องข้อความ หรือปุ่ม "แก้ไข" ในแผนงาน → เปิดหน้าต่างแก้กำหนดการของวันนั้น
   const openFromEvent = (e) => {
     const el = e.target.closest('[data-day]');
